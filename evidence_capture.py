@@ -1,6 +1,9 @@
 import sys
 import smbus
 import time
+from picamera2 import Picamera2
+from picamera2.encoders import H264Encoder
+from picamera2.outputs import CircularOutput
 
 ###############################################
 # Constants
@@ -29,7 +32,16 @@ I2C_REG_HISTORY_99	= 0x77
 
 i2c = smbus.SMBus(1)
 
-
+###############################################
+# Camera setup.
+picam2 = Picamera2()
+fps = 30
+dur = 5
+micro = int((1 / fps) * 1000000)
+vconfig = picam2.create_video_configuration()
+vconfig['controls']['FrameDurationLimits'] = (micro, micro)
+encoder = H264Encoder()
+picam2.configure(vconfig)
 
 ###############################################
 # Functions
@@ -74,7 +86,18 @@ reg_write(i2c,PCBARTISTS_DBM,I2C_REG_TAVG_LOW,0x7D)
 
 
 while True:
+    picamera2.c
     data = reg_read(i2c, PCBARTISTS_DBM, I2C_REG_DECIBEL)
     print("Sound Level (dB SPL) = {:3d}".format(int.from_bytes(data, "big")))
     time.sleep(0.125)
 sys.exit()
+
+
+
+##############
+
+output = CircularOutput(buffersize=int(fps * (dur + 0.2)), outputtofile=False)
+output.fileoutput = "file.h264"
+picam2.start_recording(encoder, output)
+time.sleep(dur)
+output.stop()
