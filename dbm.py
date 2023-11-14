@@ -4,7 +4,8 @@ import smbus
 import time
 import threading
 from queue import Queue
-from datetime import datetime
+from datetime import datetime,timedelta
+from sleep_until import sleep_until
 ###############################################
 # Constants
 
@@ -63,7 +64,9 @@ class DBMeter(threading.Thread):
         self.name = name
         self.fifo = deque
         i2c = smbus.SMBus(1)
-        self.db_level = 0;
+        self.db_level = 0
+        self.prev_ts = datetime.now()
+        self.wake_time = datetime.now() + timedelta(0,500)
         # Read device ID to make sure that we can communicate with the ADXL343
         data = reg_read(i2c, PCBARTISTS_DBM, I2C_REG_VERSION)
         print("dbMeter VERSION = 0x{:02x}".format(int.from_bytes(data, "big")))
@@ -78,19 +81,35 @@ class DBMeter(threading.Thread):
     
     def set_queue_duration(self,duration_in_secs):
         self.queue_length = 8*duration_in_secs
+        self.fifo = deque(maxlen=self.queue_length)
+
+    def set_callback(self,callback):
+        self.cb = callback
+
 
     def capture(self):
-        self.fifo = deque(maxlen=self.queue_length)
+        ts = datetime.now()
         data = reg_read(i2c, PCBARTISTS_DBM, I2C_REG_DECIBEL)
         self.db_level = int.from_bytes(data, "big")
-        self.fifo.append(tuple([datetime.now(),self.db_level]))
+        self.fifo.append(tuple([ts,self.db_level]))
         print("Sound Level (dB SPL) = {:3d}".format(self.db_level))
+        print(ts-self.prev_ts)
+        self.prev_ts = ts
+        self.wake_time = ts + timedelta(0,0.125)
 
     def run(self):
-        db_level = 0
+        self.trigger=False
+        self.half_cycle_count = self.queue_length/2
         while True:
+            if self.trigger:
+                if self.half_cycle_count < 0:
+                    break
+                else:
+                    self.half_cycle_count = self.half_cycle_count - 1
             self.capture()
-            time.sleep(0.125)
+            if not self.trigger and self.db_level > 70:
+                self.trigger = True
+            sleep_until(self.wake_time.timestamp())
 
 
 
