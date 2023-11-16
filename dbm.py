@@ -96,7 +96,7 @@ class DBMeter(threading.Thread):
         print(ts-self.prev_ts)
         self.prev_ts = ts
         self.wake_time = ts + timedelta(0,0.125)
-
+    
     def run(self):
         self.trigger=False
         self.half_cycle_count = self.queue_length/2
@@ -105,6 +105,7 @@ class DBMeter(threading.Thread):
                 if self.half_cycle_count < 0:
                     break
                 else:
+                    print(self.half_cycle_count)
                     self.half_cycle_count = self.half_cycle_count - 1
             self.capture()
             if not self.trigger and self.db_level > 70:
