@@ -8,6 +8,7 @@ from picamera2 import Picamera2
 from picamera2.encoders import H264Encoder
 from picamera2.outputs import CircularOutput
 import concurrent.futures
+from buffered_output import BufferedOutput
 
 ###############################################
 # Camera setup.
@@ -21,9 +22,7 @@ encoder = H264Encoder(10000000)
 picam2.configure(vconfig)
 interval = 0.125
 ##############
-
-output = CircularOutput(buffersize=int(fps * (dur + 0.2)), outputtofile=False)
-output.fileoutput = "file.h264"
+video_file_increment = 0;
 
 def cleanup():
     picam2.stop_()
@@ -33,7 +32,7 @@ def startLoop():
     a.capture()
 
 
-def processVideo(data_buffer,video_file_path):
+def processVideo(data_buffer,video_file_name,timestamp_deque):
     print("fired video process function")
     for time,db in data_buffer:
         print(time.strftime("%m/%d/%Y, %H:%M:%S.%fUTC")," ",str(db),"dB")
@@ -44,16 +43,22 @@ if (__name__ == "__main__"):
     atexit.register(cleanup)
     hold_fifo = 0
     while True:
-        picam2.start_recording(encoder, 'test.file',pts='timestamp.txt')
+        file_name = str(video_file_increment).zfill(6)
+        video_file_name = file_name+'.h264'
+        output = BufferedOutput(buffersize=int(fps * (dur + 0.2)), outputtofile=False)
+        output.fileoutput = video_file_name
+        picam2.start_recording(encoder, output)
+        print(picam2.capture_metadata())
         a = DBMeter("sound_meter_thread")
         a.set_queue_duration(10)
         a.start()
         a.join()
         hold_fifo = a.fifo
         print('exiting thread')
-        # output.stop()
+        output.stop()
         picam2.stop_recording()
         picam2.stop_()
-        executor.submit(processVideo,hold_fifo,'test.file')
+        executor.submit(processVideo,hold_fifo,output.getFrames(),output.getTimestamps())
+        video_file_increment = video_file_increment + 1
 
 
