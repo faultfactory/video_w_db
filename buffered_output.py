@@ -77,6 +77,11 @@ class BufferedOutput(FileOutput):
                     frame, keyframe = self._circular.popleft()
                 self._write(frame, timestamp)
 
+    def reset(self):
+        self._circular.clear()
+        self._circular_bytes.clear()
+        self._circular_ts.clear()
+        
     def stop(self):
         """Close file handle and prevent recording"""
         if not self.recording:
@@ -93,6 +98,7 @@ class BufferedOutput(FileOutput):
         self.recording = False
         self._firstframe = False
         self.close()
+
     
     def getTimestamps(self):
         return self._circular_ts

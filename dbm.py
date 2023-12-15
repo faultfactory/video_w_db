@@ -93,7 +93,7 @@ class DBMeter(threading.Thread):
         self.db_level = int.from_bytes(data, "big")
         self.fifo.append(tuple([ts,self.db_level]))
         #print("Sound Level (dB SPL) = {:3d}".format(self.db_level))
-        print("{:3d}".format(self.db_level), end=" ")
+        #print("{:3d}".format(self.db_level), end=" ")
         #print(ts-self.prev_ts)
         self.prev_ts = ts
         self.wake_time = ts + timedelta(0,0.125)
@@ -106,7 +106,7 @@ class DBMeter(threading.Thread):
                 if self.half_cycle_count < 0:
                     break
                 else:
-                    print(self.half_cycle_count)
+         #           print(self.half_cycle_count)
                     self.half_cycle_count = self.half_cycle_count - 1
             self.capture()
             if not self.trigger and self.db_level > 70:
