@@ -2,7 +2,7 @@
 
 import collections
 from multiprocessing import Lock
-
+import sys
 from picamera2.outputs import FileOutput
 from datetime import datetime,timedelta
 
@@ -41,7 +41,7 @@ class BufferedOutput(FileOutput):
         with self._lock:
             self._buffersize = value
             self._circular = collections.deque(maxlen=value)
-            self._circular_preserved = collections.deque(maxlen=value)
+            self._circular_bytes = collections.deque(maxlen=value)
             self._circular_ts = collections.deque(maxlen=value)
 
     def outputframe(self, frame, keyframe=True, timestamp=None):
@@ -58,6 +58,7 @@ class BufferedOutput(FileOutput):
             if self._buffersize == 0:
                 return
             self._circular += [(frame, keyframe)]
+            self._circular_bytes.append(frame.read())
             self._circular_ts.append(self.reference_time + timedelta(0,timestamp/1000000.0))
         """Output frame to file"""
         if self._fileoutput is not None and self.recording and self.outputtofile:
@@ -78,18 +79,17 @@ class BufferedOutput(FileOutput):
 
     def stop(self):
         """Close file handle and prevent recording"""
-        self._circular_preserved = self._circular
-        if not self.recording or self._fileoutput is None:
+        if not self.recording:
             return
         with self._lock:
             while self._circular:
                 frame, keyframe = self._circular.popleft()
-                if self._firstframe:
-                    if keyframe:
-                        self._write(frame)
-                        self._firstframe = False
-                else:
-                    self._write(frame)
+                # if self._firstframe:
+                #     if keyframe:
+                #         self._write(frame)
+                #         self._firstframe = False
+                # else:
+                #     self._write(frame)
         self.recording = False
         self._firstframe = False
         self.close()
@@ -98,4 +98,4 @@ class BufferedOutput(FileOutput):
         return self._circular_ts
     
     def getFrames(self):
-        return self._circular_preserved
+        return self._circular_bytes

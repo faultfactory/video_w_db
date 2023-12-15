@@ -92,8 +92,9 @@ class DBMeter(threading.Thread):
         data = reg_read(i2c, PCBARTISTS_DBM, I2C_REG_DECIBEL)
         self.db_level = int.from_bytes(data, "big")
         self.fifo.append(tuple([ts,self.db_level]))
-        print("Sound Level (dB SPL) = {:3d}".format(self.db_level))
-        print(ts-self.prev_ts)
+        #print("Sound Level (dB SPL) = {:3d}".format(self.db_level))
+        print("{:3d}".format(self.db_level), end=" ")
+        #print(ts-self.prev_ts)
         self.prev_ts = ts
         self.wake_time = ts + timedelta(0,0.125)
     
