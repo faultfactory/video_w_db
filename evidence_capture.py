@@ -2,7 +2,7 @@ import sys
 import smbus
 import time
 import atexit
-import threading
+#import threading
 from dbm import DBMeter
 from picamera2 import Picamera2
 from picamera2.encoders import H264Encoder, Encoder
@@ -13,7 +13,7 @@ from matplotlib import pyplot as plt
 from PIL import Image
 from IPython.display import display
 import numpy as np
-import cv2
+#import cv2
 from matplotlib import animation
 from datetime import datetime
 import os
@@ -42,9 +42,9 @@ def cleanup():
     picam2.stop_()
     picam2.close()
 
-def startLoop():
-    threading.Timer(interval,startLoop).start()
-    a.capture()
+# def startLoop():
+#     threading.Timer(interval,startLoop).start()
+#     a.capture()
 
 def reportTimeBrackets(ts,arr):
     print("time now:", end=" ")
@@ -97,7 +97,7 @@ def generateVideoViaFunc(data_buffer,video_frames,timestamp_deque,vconfig):
     video_frames_l = video_frames.copy()
     ts_deque = timestamp_deque.copy()
     arr = np.asarray(data_buffer)
-    #reportTimeBrackets(ts_deque,arr)
+    reportTimeBrackets(ts_deque,arr)
     sz = vconfig['main']['size']
     # store generated images
     frames = [] 
@@ -107,7 +107,7 @@ def generateVideoViaFunc(data_buffer,video_frames,timestamp_deque,vconfig):
     plot_lims = [ts_deque[0],ts_deque[-1],db_min-2, max(db_max+2,80)]
     trigger_data_frame = 0
     for i in range(len(data_buffer)):
-        if data_buffer[i][1] > 70:
+        if data_buffer[i][1] > 65:
             trigger_data_frame = i
             print(i, end=" ")
             print("is trigger frame")
@@ -125,17 +125,17 @@ def generateVideoViaFunc(data_buffer,video_frames,timestamp_deque,vconfig):
     conn = SMBConnection("soundmeter","ihearyou","soundmeter", "boxotubes", use_ntlm_v2 = True)
     conn.connect('192.168.1.10')
     try:
-	ret = conn.storeFile('SoundMeter', date_name, file_obj)
+	    ret = conn.storeFile('SoundMeter', date_name, file_obj)
     except:
         print("upload fail")
         conn.close()
         file_obj.close()
         os.remove(output_file)
     else:
-	if ret > 0:
-           print("upload sucess")
-	else:
-           print("upload fail")
+        if ret > 0:
+            print("upload success")
+        else:
+            print("upload fail")
 
     conn.close()
     file_obj.close()

@@ -109,7 +109,7 @@ class DBMeter(threading.Thread):
          #           print(self.half_cycle_count)
                     self.half_cycle_count = self.half_cycle_count - 1
             self.capture()
-            if not self.trigger and self.db_level > 70:
+            if not self.trigger and self.db_level > 65:
                 self.trigger = True
             sleep_until(self.wake_time.timestamp())
 
