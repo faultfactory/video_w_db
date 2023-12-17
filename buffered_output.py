@@ -5,7 +5,7 @@ from multiprocessing import Lock
 import sys
 from picamera2.outputs import FileOutput
 from datetime import datetime,timedelta
-
+import time
 
 class BufferedOutput(FileOutput):
     """Circular buffer implementation for file output"""
@@ -40,7 +40,7 @@ class BufferedOutput(FileOutput):
             raise RuntimeError("Buffer size must be integer")
         with self._lock:
             self._buffersize = value
-            self._circular = collections.deque(maxlen=value)
+            #self._circular = collections.deque(maxlen=value)
             self._circular_bytes = collections.deque(maxlen=value)
             self._circular_ts = collections.deque(maxlen=value)
 
@@ -57,9 +57,12 @@ class BufferedOutput(FileOutput):
         with self._lock:
             if self._buffersize == 0:
                 return
-            self._circular += [(frame, keyframe)]
+            #self._circular += [(frame, keyframe)]
             self._circular_bytes.append(frame.read())
-            self._circular_ts.append(self.reference_time + timedelta(0,timestamp/1000000.0))
+            #print(timestamp)
+            self._circular_ts.append(datetime.now())
+            #self._circular_ts.append(self.reference_time + timedelta(0,timestamp/1000000.0))
+            #print(datetime.now()-self._circular_ts[-1])
         """Output frame to file"""
         if self._fileoutput is not None and self.recording and self.outputtofile:
             if self._firstframe:
@@ -78,7 +81,7 @@ class BufferedOutput(FileOutput):
                 self._write(frame, timestamp)
 
     def reset(self):
-        self._circular.clear()
+        #self._circular.clear()
         self._circular_bytes.clear()
         self._circular_ts.clear()
         
@@ -86,9 +89,9 @@ class BufferedOutput(FileOutput):
         """Close file handle and prevent recording"""
         if not self.recording:
             return
-        with self._lock:
-            while self._circular:
-                frame, keyframe = self._circular.popleft()
+        #with self._lock:
+            #while self._circular:
+            #    frame, keyframe = self._circular.popleft()
                 # if self._firstframe:
                 #     if keyframe:
                 #         self._write(frame)

@@ -2,21 +2,23 @@ import sys
 import smbus
 import time
 import atexit
-#import threading
 from dbm import DBMeter
 from picamera2 import Picamera2
 from picamera2.encoders import H264Encoder, Encoder
 from picamera2.outputs import CircularOutput
+from typing import Deque
 import concurrent.futures
 from buffered_output import BufferedOutput
 from matplotlib import pyplot as plt
+from smb.SMBConnection import SMBConnection
 from PIL import Image
-from IPython.display import display
 import numpy as np
 #import cv2
 from matplotlib import animation
 from datetime import datetime
 import os
+import gc
+from collections import deque
 ###############################################
 # Camera setup.
 picam2 = Picamera2()
@@ -30,11 +32,7 @@ encoder = Encoder()
 picam2.configure(vconfig)
 interval = 0.125
 ##############
-video_file_increment = 0;
 output = BufferedOutput(buffersize=int(fps * (dur + 0.2)), outputtofile=False)
-from matplotlib import pyplot as plt
-import cv2
-from smb.SMBConnection import SMBConnection
 
 
 def cleanup():
@@ -86,7 +84,7 @@ def animate(i,img, db_line,arr,video_frames,timestamp_deque,sz):
     y_data =[]
     ts = timestamp_deque[i]
     k = 0; 
-    while arr[k,0] < ts and k < len(arr[:,0]) : 
+    while k < len(arr[:,0]) and arr[k,0] < ts : 
         x_data.append(arr[k,0])
         y_data.append(arr[k,1])
         k=k+1
@@ -115,17 +113,31 @@ def generateVideoViaFunc(data_buffer,video_frames,timestamp_deque,vconfig):
     
     # set the title
     fig, img, db_line = produceBaseFigure(arr[trigger_data_frame,0].strftime("%Y-%m-%d %H:%M:%S"),plot_lims,sz)      
-    time.sleep(0.05)            
-    ani = animation.FuncAnimation(fig, animate, frames=len(video_frames_l), fargs=(img, db_line,arr,video_frames_l,ts_deque,sz), interval=41.6, blit=True)
+    #time.sleep(0.05)              
+    ani = animation.FuncAnimation(fig, animate, frames=len(video_frames_l), fargs=(img, db_line,arr,video_frames_l,ts_deque,sz), interval=41.6,repeat=False, blit=True)
     writergif = animation.PillowWriter(fps=24)
     date_name = arr[trigger_data_frame,0].strftime("%Y_%m_%d_%H_%M_%S") + ".gif"
     output_file = "/dev/shm/" + date_name
-    ani.save(output_file,writer=writergif)
+    try: 
+        ani.save(output_file,writer=writergif)
+        print(date_name, end=" ")
+        print("file saved to ram")
+    except Exception as e:
+        print("FAILURE ON SAVE")
+        print(e)
+        print(type(e))
+
     file_obj = open(output_file,'rb')
     conn = SMBConnection("soundmeter","ihearyou","soundmeter", "boxotubes", use_ntlm_v2 = True)
-    conn.connect('192.168.1.10')
+    connection_result = conn.connect('192.168.1.10')
+    if connection_result:
+        print("[SMB connection] success")
+    else:
+        print("[SMB connection] failure")
+    
     try:
-	    ret = conn.storeFile('SoundMeter', date_name, file_obj)
+        print("attempting_upload")
+        ret = conn.storeFile('SoundMeter', date_name, file_obj)
     except:
         print("upload fail")
         conn.close()
@@ -140,15 +152,19 @@ def generateVideoViaFunc(data_buffer,video_frames,timestamp_deque,vconfig):
     conn.close()
     file_obj.close()
     os.remove(output_file)
+    gc.collect()
+    return date_name
 
 
 if (__name__ == "__main__"):
     atexit.register(cleanup)
-    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+    futures = deque(maxlen=10)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
         while True:
             print("restarting loop")
             output.reset()
             picam2.start_recording(encoder, output)
+            #print(picam2.capture_metadata()["SensorTimestamp"])
             a = DBMeter("sound_meter_thread")
             a.set_queue_duration(10)
             a.start()
@@ -160,8 +176,13 @@ if (__name__ == "__main__"):
             output.stop()
             #print("stop camera exit: " + datetime.now().strftime("%Y_%m_%d_%H_%M_%S"))
             #print('exiting thread')
-            executor.submit(generateVideoViaFunc,a.fifo.copy(),output.getFrames(),output.getTimestamps(),vconfig)
+            fut = executor.submit(generateVideoViaFunc,a.fifo.copy(),output.getFrames(),output.getTimestamps(),vconfig)
+            futures.append(fut)
             #generateVideoViaFunc(hold_fifo,output.getFrames(),output.getTimestamps(),vconfig)
+            if futures:
+                while futures[0].done():
+                    futures[0].result()
+                    futures.popleft()  
     cleanup()
 
 
