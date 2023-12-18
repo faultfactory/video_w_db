@@ -100,14 +100,14 @@ class DBMeter(threading.Thread):
     
     def run(self):
         self.trigger=False
-        self.half_cycle_count = self.queue_length/2
+        self.trailing_cycle_count = 3*self.queue_length/4
         while True:
             if self.trigger:
-                if self.half_cycle_count < 0:
+                if self.trailing_cycle_count < 0:
                     break
                 else:
-         #           print(self.half_cycle_count)
-                    self.half_cycle_count = self.half_cycle_count - 1
+         #           print(self.trailing_cycle_count)
+                    self.trailing_cycle_count = self.trailing_cycle_count - 1
             self.capture()
             if not self.trigger and self.db_level > 65:
                 self.trigger = True
