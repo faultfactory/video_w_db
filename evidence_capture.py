@@ -7,7 +7,7 @@ from picamera2 import Picamera2
 from picamera2.encoders import H264Encoder, Encoder
 from picamera2.outputs import CircularOutput
 from typing import Deque
-import concurrent.futures
+from threading import Thread
 from buffered_output import BufferedOutput
 from matplotlib import pyplot as plt
 from smb.SMBConnection import SMBConnection
@@ -19,6 +19,8 @@ from datetime import datetime
 import os
 import gc
 from collections import deque
+import tracemalloc
+
 ###############################################
 # Camera setup.
 picam2 = Picamera2()
@@ -55,6 +57,7 @@ def reportTimeBrackets(ts,arr):
     print(arr[0,0].strftime("%Y-%m-%d %H:%M:%S"))
     print("data end: ", end=" ")
     print(arr[-1,0].strftime("%Y-%m-%d %H:%M:%S"))
+    return
     
     
 
@@ -93,12 +96,12 @@ def animate(i,img, db_line,arr,video_frames,timestamp_deque,sz):
 
 def generateVideoViaFunc(data_buffer,video_frames,timestamp_deque,vconfig):
     video_frames_l = video_frames.copy()
+    print("video_frames_l size:")
+    print(sys.getsizeof(video_frames_l))
     ts_deque = timestamp_deque.copy()
     arr = np.asarray(data_buffer)
     reportTimeBrackets(ts_deque,arr)
     sz = vconfig['main']['size']
-    # store generated images
-    frames = [] 
     # pull the data in as a np array
     db_max = arr.max(axis=0)[1]
     db_min = arr.min(axis=0)[1]
@@ -152,37 +155,65 @@ def generateVideoViaFunc(data_buffer,video_frames,timestamp_deque,vconfig):
     conn.close()
     file_obj.close()
     os.remove(output_file)
-    gc.collect()
     return date_name
+
+import linecache
+def display_top(snapshot, key_type='lineno', limit=10):
+    snapshot = snapshot.filter_traces((
+        tracemalloc.Filter(False, "<frozen importlib._bootstrap>"),
+        tracemalloc.Filter(False, "<unknown>"),
+    ))
+    top_stats = snapshot.statistics(key_type)
+
+    print("Top %s lines" % limit)
+    for index, stat in enumerate(top_stats[:limit], 1):
+        frame = stat.traceback[0]
+        print("#%s: %s:%s: %.1f KiB"
+              % (index, frame.filename, frame.lineno, stat.size / 1024))
+        line = linecache.getline(frame.filename, frame.lineno).strip()
+        if line:
+            print('    %s' % line)
+
+    other = top_stats[limit:]
+    if other:
+        size = sum(stat.size for stat in other)
+        print("%s other: %.1f KiB" % (len(other), size / 1024))
+    total = sum(stat.size for stat in top_stats)
+    print("Total allocated size: %.1f KiB" % (total / 1024))
+    return
 
 
 if (__name__ == "__main__"):
     atexit.register(cleanup)
-    futures = deque(maxlen=10)
-    with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
-        while True:
-            print("restarting loop")
-            output.reset()
-            picam2.start_recording(encoder, output)
-            #print(picam2.capture_metadata()["SensorTimestamp"])
-            a = DBMeter("sound_meter_thread")
-            a.set_queue_duration(10)
-            a.start()
-            a.join()
-            #print("stop camera enter: " + datetime.now().strftime("%Y_%m_%d_%H_%M_%S"))
-            #print("reference time was: ", end=" ")
-            #print(output.reference_time.strftime("%Y-%m-%d %H:%M:%S"))
-            picam2.stop_recording()
-            output.stop()
-            #print("stop camera exit: " + datetime.now().strftime("%Y_%m_%d_%H_%M_%S"))
-            #print('exiting thread')
-            fut = executor.submit(generateVideoViaFunc,a.fifo.copy(),output.getFrames(),output.getTimestamps(),vconfig)
-            futures.append(fut)
-            #generateVideoViaFunc(hold_fifo,output.getFrames(),output.getTimestamps(),vconfig)
-            if futures:
-                while futures[0].done():
-                    futures[0].result()
-                    futures.popleft()  
+    tracemalloc.start(10)
+    threads = deque()
+    while True:
+        snapshot = tracemalloc.take_snapshot()
+        display_top(snapshot)
+        print("restarting loop")
+        if threads:
+            while not threads[0].is_alive():
+                print("deleting finished threads")
+                t = threads.popleft()
+                t.join()
+        output.reset()
+        gc.collect()
+        picam2.start_recording(encoder, output)
+        #print(picam2.capture_metadata()["SensorTimestamp"])
+        a = DBMeter("sound_meter_thread")
+        a.set_queue_duration(10)
+        a.start()
+        a.join()
+        #print("stop camera enter: " + datetime.now().strftime("%Y_%m_%d_%H_%M_%S"))
+        #print("reference time was: ", end=" ")
+        #print(output.reference_time.strftime("%Y-%m-%d %H:%M:%S"))
+        picam2.stop_recording()
+        output.stop()
+        #print("stop camera exit: " + datetime.now().strftime("%Y_%m_%d_%H_%M_%S"))
+        #print('exiting thread')
+        threads.append(Thread(target=generateVideoViaFunc,args=(a.fifo.copy(),output.getFrames(),output.getTimestamps(),vconfig,)))
+        threads[-1].start()
+        #generateVideoViaFunc(hold_fifo,output.getFrames(),output.getTimestamps(),vconfig)
     cleanup()
 
 
